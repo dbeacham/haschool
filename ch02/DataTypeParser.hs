@@ -3,6 +3,8 @@ module DataTypeParser where
 import System.Environment
 import Text.ParserCombinators.Parsec hiding (spaces)
 import Monad (liftM)
+import Numeric (readHex, readOct)
+import Data.Char (digitToInt)
 
 main :: IO ()
 main = do
@@ -16,7 +18,7 @@ readExpr input =
     Right val -> "Found value: " ++ show val
 
 symbol :: Parser Char
-symbol = oneOf "!$%&|*+-/:<=?>@^_~#"
+symbol = oneOf "!$%&|*+-/:<=?>@^_~"
 
 -- Ex2,3. R5Rs allows for internally escaped quotes
 escapedChars :: Parser Char
@@ -52,18 +54,11 @@ parseString = do
   return $ String x
 
 parseAtom :: Parser LispVal
-parseAtom = do
-  first <- letter <|> symbol
-  rest <- many $ letter <|> digit <|> symbol
-  let atom = [first] ++ rest
-  return $ case atom of
-             "#t" -> Bool True
-             "#f" -> Bool False
-             otherwise -> Atom atom
+parseAtom = liftM Atom $ many1 $ letter <|> digit <|> symbol
 
 parseNumber :: Parser LispVal
 -- liftM version
-parseNumber = liftM (Number . read) $ many1 digit
+-- parseNumber = liftM (Number . read) $ many1 digit
 
 -- Ex1a. do-notation version
 -- parseNumber = do
@@ -73,7 +68,52 @@ parseNumber = liftM (Number . read) $ many1 digit
 -- Ex1b. explicit monad form
 -- parseNumber = many1 digit >>= \s -> return $ Number $ read s
 
+-- Ex4. Extend to support numbers of different bases
+parseNumber = do
+  parseDigital1 <|> parseDigital2 <|> parseHex <|> parseOct <|> parseBin
+
+parseDigital1 :: Parser LispVal
+parseDigital1 = liftM (Number . read) $ many1 digit
+
+parseDigital2 :: Parser LispVal
+parseDigital2 = do
+  try $ string "#d"
+  liftM (Number . read) $ many1 digit
+
+parseHex :: Parser LispVal
+parseHex = do
+  try $ string "#x"
+  x <- many1 hexDigit
+  return $ Number (hex2dig x)
+
+hex2dig x = fst $ readHex x !! 0
+
+parseOct :: Parser LispVal
+parseOct = do
+  try $ string "#o"
+  x <- many1 octDigit
+  return $ Number (oct2dig x)
+
+oct2dig x = fst $ readOct x !! 0
+
+parseBin :: Parser LispVal
+parseBin = do
+  try $ string "#b"
+  x <- many1 $ oneOf "01"
+  return $ Number (bin2dig x)
+
+bin2dig :: String -> Integer
+bin2dig str = fromIntegral $ foldl ((+) . (2*)) 0 $ map digitToInt str
+
+parseBool = do
+  char '#'
+  x <- oneOf "tf"
+  case x of
+    't' -> return $ Bool True
+    'f' -> return $ Bool False
+
 parseExpr :: Parser LispVal
 parseExpr = parseAtom
         <|> parseString
         <|> parseNumber
+        <|> parseBool
