@@ -3,7 +3,9 @@ module DataTypeParser where
 import System.Environment
 import Text.ParserCombinators.Parsec hiding (spaces)
 import Monad (liftM)
-import Numeric (readHex, readOct)
+import Numeric (readHex, readOct, readFloat)
+import Ratio (Ratio, (%))
+import Complex (Complex(..))
 import Data.Char (digitToInt)
 
 main :: IO ()
@@ -39,8 +41,12 @@ data LispVal = Atom String
              | List [LispVal]
              | DottedList [LispVal] LispVal
              | Number Integer
+             | Float Double
+             | Rational (Ratio Integer)
+             | Complex (Complex Double)
              | String String
              | Bool Bool
+             | Character Char
   deriving Show
 
 parseString :: Parser LispVal
@@ -54,7 +60,10 @@ parseString = do
   return $ String x
 
 parseAtom :: Parser LispVal
-parseAtom = liftM Atom $ many1 $ letter <|> digit <|> symbol
+parseAtom = do
+  first <- letter <|> symbol
+  rest <- many $ letter <|> digit <|> symbol
+  return . Atom $ [first] ++ rest
 
 parseNumber :: Parser LispVal
 -- liftM version
@@ -112,8 +121,50 @@ parseBool = do
     't' -> return $ Bool True
     'f' -> return $ Bool False
 
+parseCharacter :: Parser LispVal
+parseCharacter = do
+  try $ string "#\\"
+  val <- try $ string "newline" <|> string "space"
+      <|> do { c <- anyChar; notFollowedBy alphaNum; return [c] }
+  return $ Character $ case val of
+    "newline" -> '\n'
+    "space"   -> ' '
+    otherwise -> val !! 0
+
+parseFloat :: Parser LispVal
+parseFloat = do
+  x <- many1 digit
+  char '.'
+  y <- many1 digit
+  return $ Float $ fst . head $ readFloat (x ++ "." ++ y)
+
+parseRational :: Parser LispVal
+parseRational = do
+  num <- many1 digit
+  char '/'
+  den <- many1 digit
+  return . Rational $ (read num) % (read den)
+  
+parseComplex :: Parser LispVal
+parseComplex = do
+  x <- do { try parseFloat <|> parseNumber }
+  char '+'
+  y <- do { try parseFloat <|> parseNumber }
+  char 'i'
+  return . Complex $ toDouble x :+ toDouble y
+
+toDouble :: LispVal -> Double
+toDouble (Float f) = f
+toDouble (Number n ) = fromIntegral n
+toDouble _ = undefined
+
 parseExpr :: Parser LispVal
 parseExpr = parseAtom
         <|> parseString
-        <|> parseNumber
-        <|> parseBool
+        -- we need the 'try' as they can all start with a hash charater
+        <|> try parseComplex
+        <|> try parseFloat
+        <|> try parseRational
+        <|> try parseNumber
+        <|> try parseBool
+        <|> try parseCharacter
