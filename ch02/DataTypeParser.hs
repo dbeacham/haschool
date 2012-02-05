@@ -158,6 +158,21 @@ toDouble (Float f) = f
 toDouble (Number n ) = fromIntegral n
 toDouble _ = undefined
 
+parseList :: Parser LispVal
+parseList = liftM List $ sepBy parseExpr spaces
+
+parseDottedList :: Parser LispVal
+parseDottedList = do
+  head <- endBy parseExpr spaces
+  tail <- char '.' >> spaces >> parseExpr
+  return $ DottedList head tail
+
+parseQuoted :: Parser LispVal
+parseQuoted = do
+  char '\''
+  x <- parseExpr
+  return $ List [Atom "quote", x]
+
 parseExpr :: Parser LispVal
 parseExpr = parseAtom
         <|> parseString
@@ -168,3 +183,8 @@ parseExpr = parseAtom
         <|> try parseNumber
         <|> try parseBool
         <|> try parseCharacter
+        <|> parseQuoted
+        <|> do char '('
+               x <- (try parseList) <|> try parseDottedList
+               char ')'
+               return x
