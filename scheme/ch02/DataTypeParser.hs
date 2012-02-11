@@ -1,12 +1,25 @@
 module DataTypeParser where
-
 import System.Environment
 import Text.ParserCombinators.Parsec hiding (spaces)
-import Monad (liftM)
+import Control.Monad (liftM)
 import Numeric (readHex, readOct, readFloat)
-import Ratio (Ratio, (%))
-import Complex (Complex(..))
+import Data.Ratio (Ratio, (%))
+import Data.Complex (Complex(..))
 import Data.Char (digitToInt)
+
+data LispVal = Atom String
+             | List [LispVal]
+             | DottedList [LispVal] LispVal
+             | Number Integer
+             | Float Double
+             | Rational (Ratio Integer)
+             | Complex (Complex Double)
+             | String String
+             | Bool Bool
+             | Character Char
+  
+instance Show LispVal where
+  show = showVal
 
 main :: IO ()
 main = do
@@ -36,18 +49,6 @@ escapedChars = do
 
 spaces :: Parser ()
 spaces = skipMany1 space
-
-data LispVal = Atom String
-             | List [LispVal]
-             | DottedList [LispVal] LispVal
-             | Number Integer
-             | Float Double
-             | Rational (Ratio Integer)
-             | Complex (Complex Double)
-             | String String
-             | Bool Bool
-             | Character Char
-  deriving Show
 
 parseString :: Parser LispVal
 parseString = do
@@ -188,3 +189,18 @@ parseExpr = parseAtom
                x <- (try parseList) <|> try parseDottedList
                char ')'
                return x
+
+showVal :: LispVal -> String
+showVal (Atom name) = name
+showVal (String contents) = "\"" ++ contents ++ "\""
+showVal (Number contents) = show contents
+showVal (Bool True) = "#t"
+showVal (Bool False) = "#f"
+showVal (List contents) = "(" ++ unwordsList contents ++ ")"
+showVal (DottedList head tail) = "(" ++ unwordsList head ++ " . " ++ showVal tail ++ ")"
+-- showVal (Complex value) = undefined
+-- showVal (Float value) = undefined
+-- showVal (Char contents) = undefined
+
+unwordsList :: [LispVal] -> String
+unwordsList = unwords . map showVal 
