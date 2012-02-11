@@ -1,4 +1,5 @@
 module DataTypeParser where
+
 import System.Environment
 import Text.ParserCombinators.Parsec hiding (spaces)
 import Control.Monad (liftM)
@@ -22,15 +23,13 @@ instance Show LispVal where
   show = showVal
 
 main :: IO ()
-main = do
-  (arg:_) <- getArgs
-  putStrLn $ readExpr $ arg
+main = getArgs >>= putStrLn . show . eval . readExpr . (!! 0)
 
-readExpr :: String -> String
+readExpr :: String -> LispVal
 readExpr input =
   case parse parseExpr "lisp" input of
-    Left err -> "No match: " ++ show err
-    Right val -> "Found value: " ++ show val
+    Left err -> String $ "No match: " ++ show err
+    Right val -> val
 
 symbol :: Parser Char
 symbol = oneOf "!$%&|*+-/:<=?>@^_~"
@@ -193,14 +192,51 @@ parseExpr = parseAtom
 showVal :: LispVal -> String
 showVal (Atom name) = name
 showVal (String contents) = "\"" ++ contents ++ "\""
+showVal (Complex (r :+ i)) = show r ++ "+" ++ show i ++ "i"
+showVal (Float contents) = show contents
+showVal (Rational contents) = show contents
 showVal (Number contents) = show contents
 showVal (Bool True) = "#t"
 showVal (Bool False) = "#f"
 showVal (List contents) = "(" ++ unwordsList contents ++ ")"
 showVal (DottedList head tail) = "(" ++ unwordsList head ++ " . " ++ showVal tail ++ ")"
--- showVal (Complex value) = undefined
--- showVal (Float value) = undefined
--- showVal (Char contents) = undefined
 
 unwordsList :: [LispVal] -> String
 unwordsList = unwords . map showVal 
+
+eval :: LispVal -> LispVal
+
+-- primitive types
+eval val@(Atom _) = val
+eval val@(String _) = val
+eval val@(Complex _) = val
+eval val@(Float _) = val
+eval val@(Rational _) = val
+eval val@(Number _) = val
+eval val@(Bool _) = val
+eval val@(Character _) = val
+eval (List [Atom "quote", val]) = val
+
+-- function application
+eval (List (Atom func : args)) = apply func $ map eval args
+
+apply :: String -> [LispVal] -> LispVal
+apply func args = maybe (Bool False) ($ args) $ lookup func primitives
+
+primitives :: [(String, [LispVal] -> LispVal)]
+primitives = [
+    ("+", numericBinop (+))
+  , ("-", numericBinop (-))
+  , ("*", numericBinop (*))
+  , ("/", numericBinop div)
+  , ("mod", numericBinop mod)
+  , ("quotient", numericBinop quot)
+  , ("remainder", numericBinop rem)
+  ]
+
+numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> LispVal
+numericBinop op params = Number $ foldl1 op $ map unpackNum params
+
+unpackNum :: LispVal -> Integer
+unpackNum (Number n) = n
+unpackNum _ = 0
