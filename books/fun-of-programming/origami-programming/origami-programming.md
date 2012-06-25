@@ -295,5 +295,41 @@ Infact, `insert` can also be described as an unfold. The state of the unfold con
 
 ~~~ {.haskell}
 insert'' :: (Ord a) => a -> List a -> List a
-insert'' y = unfoldL' ins
+insert'' y xs = unfoldL' ins (Just y, xs)
+  where
+    -- Not yet inserted value
+    ins (Just y, Cons x xs)
+      | y < x = Just (y, (Nothing, Cons x xs))
+      | otherwise = Just (x, (Just y, xs))
+    ins (Just y, Nil) = Just (y, (Nothing, Nil))
+
+    -- Inserted value, but need to copy old list value by value
+    ins (Nothing, Nil) = Nothing
+    ins (Nothing, Cons x xs) = Just (x, (Nothing, xs))
+~~~
+
+Note, that once the correct position has been found for the insertion, we still need to copy the rest of the original list across value by value. The directly recursive definition, `insert`, `insert'`, did not share this problem. One branch shares the remainder of the original list without making another recursive call.
+
+This pattern of recursion can be captured as another recursion operator, known as an _apomorphism_.
+
+~~~ {.haskell}
+apoL' :: (b -> Maybe (a, Either b (List a))) -> b -> List a
+apoL' f z = case f z of
+              Nothing -> Nil
+              Just (x, Left v) -> Cons x (apoL' f v)
+              Just (x, Right xs) -> Cons x xs
+~~~
+
+For non-empty lists, the generating function returns either a new seed and continues recursing or a whole list which is used directly.
+
+With this, we can write `insert''` in terms of `apoL'`,
+
+~~~ {.haskell}
+insert''' :: (Ord a) => a -> List a -> List a
+insert''' y xs = apoL' ins (y, xs)
+  where
+    ins (y, Cons x xs)
+      | y < x = Just (y, Right (Cons x xs))
+      | otherwise = Just (x, Left (y, xs))
+    ins (y, Nil) = Just (y, Right Nil)
 ~~~

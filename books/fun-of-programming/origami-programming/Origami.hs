@@ -206,3 +206,27 @@ bubble' = foldL step Nil
     step x (Cons y ys)
       | x < y = Cons x (Cons y ys)
       | otherwise = Cons y (Cons x ys)
+
+insert'' :: (Ord a) => a -> List a -> List a
+insert'' y xs = unfoldL' ins (Just y, xs)
+  where
+    ins (Nothing, Nil) = Nothing
+    ins (Nothing, Cons x xs) = Just (x, (Nothing, xs))
+    ins (Just y, Cons x xs)
+      | y < x = Just (y, (Nothing, Cons x xs))
+      | otherwise = Just (x, (Just y, xs))
+    ins (Just y, Nil) = Just (y, (Nothing, Nil))
+
+apoL' :: (b -> Maybe (a, Either b (List a))) -> b -> List a
+apoL' f z = case f z of
+              Nothing -> Nil
+              Just (x, Left v) -> Cons x (apoL' f v)
+              Just (x, Right xs) -> Cons x xs
+
+insert''' :: (Ord a) => a -> List a -> List a
+insert''' y xs = apoL' ins (y, xs)
+  where
+    ins (y, Cons x xs)
+      | y < x = Just (y, Right (Cons x xs))
+      | otherwise = Just (x, Left (y, xs))
+    ins (y, Nil) = Just (y, Right Nil)
